@@ -5,8 +5,7 @@ use std::{
 };
 
 use crate::{
-    encoder_reader::{EncoderReader},
-    index_offset::IndexOffset, utility::find_largest_subset,
+    encoder_reader::EncoderReader, index_offset::IndexMapper, utility::find_largest_subset,
 };
 
 pub struct LzssOptions {
@@ -27,7 +26,7 @@ impl LzssOptions {
         source: &mut impl Read,
         destination: &mut impl Write,
     ) -> io::Result<usize> {
-        let mut buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
+        let buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
         LzssSymbol::S(buffer[0]).write(destination)?;
 
         let mut written = 0;
@@ -46,7 +45,7 @@ impl LzssOptions {
         let (start, size) = find_largest_subset(
             buffer,
             self.dict_size,
-            &IndexOffset::new(buffer, self.dict_size),
+            &IndexMapper::new(buffer, self.dict_size),
             self.buff_size,
         );
 

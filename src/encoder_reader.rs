@@ -14,10 +14,19 @@ pub struct EncoderReader<'a> {
 impl<'a> EncoderReader<'a> {
     pub fn new(read: &'a mut impl Read, dict_size: usize, buff_size: usize) -> io::Result<Self> {
         let size = dict_size + buff_size;
-        let mut buff = Vec::with_capacity(size);
-        read.read_exact(&mut buff[0..1])?;
-        let char = buff[0];
-        buff[1..dict_size].fill(char);
+        // memory layout
+        // [dictionary][input]
+        let mut buff = vec![0u8; size];
+        // first character to dictionary
+        // also fill input buffer
+        // [dictionary][input]
+        // ___________12345678
+        read.read_exact(&mut buff[dict_size - 1..])?;
+        // fill dictionary
+        // [dictionary][input]
+        // 1111111111112345678
+        let char = buff[dict_size - 1];
+        buff[0..dict_size - 1].fill(char);
         Ok(Self {
             source: read,
             size,
