@@ -26,12 +26,12 @@ impl LzssOptions {
         source: &mut impl Read,
         destination: &mut impl Write,
     ) -> io::Result<usize> {
-        let buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
+        let mut buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
         LzssSymbol::S(buffer[0]).write(destination)?;
 
         let mut written = 0;
-        while let Ok(newly_writter) = self.encode(source, destination) {
-            written += newly_writter
+        while let Ok(newly_written) = self.encode_one(&mut buffer, destination) {
+            written += newly_written
         }
 
         Ok(written)
@@ -50,7 +50,7 @@ impl LzssOptions {
         );
 
         Ok(if LzssSymbol::PC_SIZE < size {
-            LzssSymbol::PC(start as u64, size as u64).write(destination)?;
+            LzssSymbol::PC(start as u8, size as u8).write(destination)?;
             buffer.load(size)?;
             LzssSymbol::PC_SIZE
         } else {
@@ -63,12 +63,12 @@ impl LzssOptions {
 
 enum LzssSymbol {
     S(u8),
-    PC(u64, u64),
+    PC(u8, u8),
 }
 
 impl LzssSymbol {
     const S_SIZE: usize = size_of::<u8>() * 2;
-    const PC_SIZE: usize = size_of::<u8>() + size_of::<u64>() * 2;
+    const PC_SIZE: usize = size_of::<u8>() + size_of::<u8>() * 2;
 
     fn write(&self, destination: &mut impl Write) -> io::Result<()> {
         match *self {
@@ -91,11 +91,11 @@ impl LzssSymbol {
                 Self::S(s[0])
             }
             _ => {
-                let mut p = [0u8; size_of::<u64>()];
+                let mut p = [0u8; size_of::<u8>()];
                 source.read_exact(&mut p)?;
-                let mut c = [0u8; size_of::<u64>()];
+                let mut c = [0u8; size_of::<u8>()];
                 source.read_exact(&mut c)?;
-                Self::PC(u64::from_be_bytes(p), u64::from_be_bytes(c))
+                Self::PC(u8::from_be_bytes(p), u8::from_be_bytes(c))
             }
         })
     }
