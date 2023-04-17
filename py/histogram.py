@@ -84,7 +84,7 @@ def process_file(dir: str, name: str, axis: plt.Axes) -> float:
     """
     data, dimensions, max = read_file(dir + name)
     # Save bars from the histogram
-    _, _, bars = axis.hist(data, bins=max, range=(0, max))
+    _, _, bars = axis.hist(data, bins=max+1, range=(0, max))
     axis.set_title(name)
     axis.set_xlim(0, max)
     # Extract bar values and calculate entropy
