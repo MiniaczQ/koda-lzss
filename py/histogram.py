@@ -1,11 +1,11 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import os
 import io
 import math
-from typing import Tuple, List
+import os
+import sys
+import matplotlib.pyplot as plt
+import numpy as np
 
-def validate_header(file: io.BufferedReader) -> Tuple[Tuple[int, int], int]:
+def validate_header(file: io.BufferedReader) -> tuple[tuple[int, int], int]:
     """
     Validate and extract data from a PGM header.
 
@@ -39,7 +39,7 @@ def validate_header(file: io.BufferedReader) -> Tuple[Tuple[int, int], int]:
     return (tuple([int(x) for x in dimensions]), int(max))
 
 
-def read_file(path: str) -> Tuple[np.ndarray, int]:
+def read_file(path: str) -> tuple[np.ndarray, int]:
     """
     Parse raw binary data into a NumPy array.
 
@@ -56,7 +56,7 @@ def read_file(path: str) -> Tuple[np.ndarray, int]:
     return data, dimensions, max
 
 
-def calculate_entropy(sums: List[int], total: int) -> float:
+def calculate_entropy(sums: list[int], total: int) -> float:
     """
     Calculate entropy of dataset processed into a histogram.
 
@@ -94,7 +94,7 @@ def process_file(dir: str, name: str, axis: plt.Axes) -> float:
     return entropy
 
 
-def process_folder(path: str) -> List[Tuple[str, float]]:
+def process_folder(path: str) -> list[tuple[str, float]]:
     """
     Given relative path to a directory, process all files inside and create a rectangular plot grid with histograms.
 
@@ -118,6 +118,13 @@ def process_folder(path: str) -> List[Tuple[str, float]]:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        for filename in sys.argv[1:]:
+            axes = plt.axes()
+            entropy = process_file('', filename, axes)
+            print(f'Entropy for file {filename}: {entropy:.3f}')
+            plt.show()
+        exit()
     results = []
     dirs = ["../data/txt/", "../data/img/"]
     for dir in dirs:
