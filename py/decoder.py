@@ -4,6 +4,11 @@ from math import ceil, floor, log2
 import sys
 from typing import BinaryIO
 
+BITS_IN_BYTE = 8
+MIN_BYTE_VALUE = 0x00
+MAX_BYTE_VALUE = 0xFF
+BYTES_TO_READ_AT_ONCE = 4096
+
 
 @dataclass
 class LzssConfig:
@@ -17,48 +22,46 @@ class LzssConfig:
     distance_from_end: bool = False
 
 
-def bit_extract(value: int, offset: int, length: int) -> int:
-    assert 0 <= value <= 255
-    assert offset + length <= 8
-    offset_mask = 0xFF >> offset
-    shift = 8 - offset - length
-    return (value & offset_mask) >> shift
+class BitBuffer:
+    def __init__(self):
+        self._buffer = b''
+        self._offset = 0
+        self._remaining_bits = 0
+    
+    def add_offset(self, offset: int):
+        self._offset += offset
+        self._remaining_bits -= offset
+        removed_byte_count = floor(self._offset / BITS_IN_BYTE)
+        self._buffer = self._buffer[removed_byte_count:]
+        self._offset -= removed_byte_count * BITS_IN_BYTE
+    
+    def add_bytes(self, b: bytes):
+        self._buffer += b
+        self._remaining_bits += len(b) * BITS_IN_BYTE
 
+    @property
+    def buffer(self):
+        return self._buffer
 
-def read_value(buffer: bytes, bit_width: int, bit_offset: int) -> int:
-    bytes_needed = ceil(bit_width / 8) + (1 if bit_offset > 0 else 0)
-    assert len(buffer) >= bytes_needed
+    @property
+    def offset(self):
+        return self._offset
 
-    pre_bits = min(8 - bit_offset, bit_width)
-    value = bit_extract(buffer[0], bit_offset, min(8 - bit_offset, bit_width))
-    if pre_bits == bit_width:
-        return value
-
-    buffer = buffer[1:]
-    full_bytes = floor((bit_width - pre_bits) / 8)
-    post_bits = bit_width - pre_bits - full_bytes * 8
-    for _ in range(full_bytes):
-        value <<= 8
-        value += buffer[0]
-        buffer = buffer[1:]
-    if post_bits == 0:
-        return value
-
-    value <<= post_bits
-    value += bit_extract(buffer[0], 0, post_bits)
-    return value
+    @property
+    def remaining_bits(self):
+        return self._remaining_bits
 
 
 class SlidingWindow:
-    def __init__(self, size: int, fill: int = ord('\0'), distance_from_end=False):
-        assert 0 <= fill <= 255
+    def __init__(self, size: int, fill: int = MIN_BYTE_VALUE, distance_from_end=False):
+        assert MIN_BYTE_VALUE <= fill <= MAX_BYTE_VALUE
         self._buffer = bytearray([fill] * size)
         self._first = 0
         self._distance_from_end = distance_from_end
         self._inserted_count = 0
     
     def insert(self, character: int):
-        assert 0 <= character <= 255
+        assert MIN_BYTE_VALUE <= character <= MAX_BYTE_VALUE
         self._buffer[self._first] = character
         self._first += 1
         if self._first >= len(self._buffer):
@@ -91,57 +94,86 @@ class SlidingWindow:
             return to_end + self._buffer[:remaining_length]
 
 
-def add_offset(added_offset: int, buffer: bytes, offset: int, remaining_bits: int) -> tuple[bytes, int, int]:
-    offset += added_offset
-    remaining_bits -= added_offset
-    removed_byte_count = floor(offset / 8)
-    buffer = buffer[removed_byte_count:]
-    offset -= removed_byte_count * 8
-    return (buffer, offset, remaining_bits)
+def bits_from_byte(value: int, offset: int, length: int) -> int:
+    '''
+    Reads `length` bits from a single byte (`value`), skipping the first `offset` bits.
+    Read bits are converted to an unsigned integer.
+    :param value: Source byte.
+    :param offset: Offset in bits.
+    :param length: Length in bits.
+    :return: Unsigned integer in range [0; 2^`length`)
+    '''
+    assert MIN_BYTE_VALUE <= value <= MAX_BYTE_VALUE
+    assert offset + length <= BITS_IN_BYTE
+    offset_mask = MAX_BYTE_VALUE >> offset
+    shift = BITS_IN_BYTE - offset - length
+    return (value & offset_mask) >> shift
+
+def bits_from_bytes(buffer: BitBuffer, length: int) -> int:
+    '''
+    Assembles an unsigned integer using `length` bits from a managed sequence of bytes (`buffer`), skipping offset if needed.
+    The integer is read in big endian order.
+    :param buffer: Source bytes (with offset).
+    :param length: Length in bits.
+    :return: Unsigned integer in range [0; 2^`length`)
+    '''
+    buf = buffer.buffer
+    offset = buffer.offset
+    bytes_needed = ceil(length / BITS_IN_BYTE) + (1 if offset > 0 else 0)
+    assert len(buf) >= bytes_needed
+    buffer.add_offset(length)
+
+    pre_bits = min(BITS_IN_BYTE - offset, length)
+    value = bits_from_byte(buf[0], offset, pre_bits)
+    if pre_bits == length:
+        return value
+
+    buf = buf[1:]
+    full_bytes = floor((length - pre_bits) / BITS_IN_BYTE)
+    post_bits = length - pre_bits - full_bytes * BITS_IN_BYTE
+    for _ in range(full_bytes):
+        value <<= BITS_IN_BYTE
+        value += buf[0]
+        buf = buf[1:]
+    if post_bits == 0:
+        return value
+
+    value <<= post_bits
+    value += bits_from_byte(buf[0], 0, post_bits)
+    return value
 
 
 def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig):
-    buffer = b''
-    bit_offset = 0
-    remaining_bits = 0
+    buffer = BitBuffer()
+    is_literal = (lambda flag: flag == 0) if config.flag_zero_means_literal else (lambda flag: flag != 0)
     if config.distance_width < 1:
         config.distance_width = ceil(log2(config.window_size))
-    literal_code_word_width = config.flag_width + 8
+    literal_code_word_width = config.flag_width + BITS_IN_BYTE
     reference_code_word_width = config.flag_width + config.length_width + config.distance_width
     min_code_word_width = min(literal_code_word_width, reference_code_word_width)
     max_code_word_width = max(literal_code_word_width, reference_code_word_width)
 
     # read the first literal
-    buffer += input_file.read(ceil(literal_code_word_width / 8))
-    remaining_bits += len(buffer) * 8
-    flag = read_value(buffer, config.flag_width, 0)
-    (buffer, bit_offset, remaining_bits) = add_offset(config.flag_width, buffer, bit_offset, remaining_bits)
-    assert (flag == 0) == config.flag_zero_means_literal
-    first_character = read_value(buffer, 8, bit_offset)
-    (buffer, bit_offset, remaining_bits) = add_offset(8, buffer, bit_offset, remaining_bits)
+    buffer.add_bytes(input_file.read(ceil(literal_code_word_width / BITS_IN_BYTE)))
+    flag = bits_from_bytes(buffer, config.flag_width)
+    assert is_literal(flag)
+    first_character = bits_from_bytes(buffer, BITS_IN_BYTE)
     window = SlidingWindow(config.window_size, first_character)
-    output_file.write(window.at(0, 1))
+    output_file.write(bytes([first_character]))
 
     while True:
-        if len(buffer) < max_code_word_width:
-            len_before_read = len(buffer)
-            buffer += input_file.read(4096)
-            len_after_read = len(buffer)
-            remaining_bits += (len_after_read - len_before_read) * 8
-        if remaining_bits < min_code_word_width:
+        if buffer.remaining_bits < max_code_word_width:
+            buffer.add_bytes(input_file.read(BYTES_TO_READ_AT_ONCE))
+        if buffer.remaining_bits < min_code_word_width:
             return  # EOF
-        flag = read_value(buffer, config.flag_width, bit_offset)
-        (buffer, bit_offset, remaining_bits) = add_offset(config.flag_width, buffer, bit_offset, remaining_bits)
-        if (flag == 0) == config.flag_zero_means_literal:
-            literal = read_value(buffer, 8, bit_offset)
-            (buffer, bit_offset, remaining_bits) = add_offset(8, buffer, bit_offset, remaining_bits)
+        flag = bits_from_bytes(buffer, config.flag_width)
+        if is_literal(flag):
+            literal = bits_from_bytes(buffer, BITS_IN_BYTE)
             window.insert(literal)
-            output_file.write(window.at(config.window_size - 1, 1))
+            output_file.write(bytes([literal]))
         else:
-            distance = read_value(buffer, config.distance_width, bit_offset)
-            (buffer, bit_offset, remaining_bits) = add_offset(config.distance_width, buffer, bit_offset, remaining_bits)
-            length = read_value(buffer, config.length_width, bit_offset)
-            (buffer, bit_offset, remaining_bits) = add_offset(config.length_width, buffer, bit_offset, remaining_bits)
+            distance = bits_from_bytes(buffer, config.distance_width)
+            length = bits_from_bytes(buffer, config.length_width)
             length += config.length_bias
             output_file.write(window.at(distance, length))
 
@@ -154,5 +186,8 @@ if __name__ == '__main__':
 
     input_file = args.input_file if args.input_file is not None else sys.stdin.buffer
     output_file = args.output_file if args.output_file is not None else sys.stdout.buffer
+    # input_file = open(r'D:\Programowanie\studia\KODA\koda-lzss\py\examples\aaaaaaaaaaaaaaa.lzss', 'rb')
+    # output_file = sys.stdout.buffer
     config = LzssConfig(256, 8, 3, flag_zero_means_literal=False)
     decode(input_file, output_file, config)
+ 
