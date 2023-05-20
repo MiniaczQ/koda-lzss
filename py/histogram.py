@@ -73,7 +73,29 @@ def calculate_entropy(sums: list[int], total: int) -> float:
     return entropy
 
 
-def process_file(dir: str, name: str, axis: plt.Axes) -> float:
+def calculate_n_order(data, order_number: int) -> tuple[list[int], int]:
+    """
+    Used in calculating entropy of a certain order.
+    order_number = 1 for second order
+    order_number = 2 for third order
+    """
+    block_pairs = {}
+    total_pairs = len(data) - order_number
+
+    for i in range(total_pairs):
+        if order_number == 1:
+            key = (data[i], data[i+1])
+        elif order_number == 2:
+            key = (data[i], data[i+1], data[i+2])
+            
+        if key in block_pairs:
+            block_pairs[key] += 1
+        else:
+            block_pairs[key] = 1
+    
+    return block_pairs.values(), total_pairs
+
+def process_file(dir: str, name: str, axis: plt.Axes) -> tuple[float, float, float]:
     """
     Given relative path to the file, process its content, draw a histogram and calculate entropy.
 
@@ -91,7 +113,13 @@ def process_file(dir: str, name: str, axis: plt.Axes) -> float:
     sums = [bar.get_height() for bar in bars]
     entropy = calculate_entropy(sums, dimensions[0] * dimensions[1])
 
-    return entropy
+    second_sums, second_total = calculate_n_order(data, 1) 
+    second_entropy = calculate_entropy(second_sums, second_total)
+
+    third_sums, third_total = calculate_n_order(data, 2)  
+    third_entropy = calculate_entropy( third_sums, third_total)
+
+    return entropy, second_entropy, third_entropy
 
 
 def process_folder(path: str) -> list[tuple[str, float]]:
@@ -104,18 +132,51 @@ def process_folder(path: str) -> list[tuple[str, float]]:
     entropies = []
     # Obtain a list of all files in a directory.
     files = os.listdir(os.path.dirname(__file__) + "/" + path)
+    
     # Calculate an optimal (or rather, good enough) grid shape for axes.
     grid_shape = math.ceil(math.sqrt(len(files))), round(math.sqrt(len(files)))
     # Create figure and axes of given shape.
     fig, axes = plt.subplots(*grid_shape)
+    
     # Process each file sequentially and assign its histogram to an axis.
     for file, i in zip(files, range(len(files))):
         print(f"Processing file #{i + 1}: {file}...")
-        entropy = process_file(path, file, axes[i // grid_shape[1]][i % grid_shape[1]])
-        entropies.append((file, entropy))
+        entropy_set = process_file(path, file, axes[i // grid_shape[1]][i % grid_shape[1]])
+        entropies.append((file, entropy_set))
     
     return entropies
 
+
+def create_hist(path: str, file_name: str) -> None:
+    """
+    Create and save a  histogram for a file in the given folder.
+    :param path: String path to the directory.
+    :returns: None
+    """
+    data, dimensions, max = read_file(path + file_name)
+    plt.figure()
+    plt.hist(data, bins=max, range=(0, max))
+    plt.title(file_name)
+    
+    save_name =  "py\\histograms\\" +  file_name.removesuffix(".pgm") + ".png"
+    plt.savefig(save_name)
+    
+
+
+def hist_for_files(path: str) -> None:
+    """
+    Create and save a separate histogram for every file in the folder.
+    :param path: String path to the directory.
+    :returns: None
+    """
+    # Obtain a list of all files in a directory.
+    files = os.listdir(os.path.dirname(__file__) + "/" + path)
+    
+    # Process each file sequentially and show and save the histogram for it.
+    for file, i in zip(files, range(len(files))):
+        print(f"Generating histogram and saving it #{i + 1}: {file}...")
+        create_hist(path, file)
+    
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
@@ -125,15 +186,23 @@ if __name__ == "__main__":
             print(f'Entropy for file {filename}: {entropy:.3f}')
             plt.show()
         exit()
+        
     results = []
-    dirs = ["../data/txt/", "../data/img/"]
+
+    dirs = ["../data/txt/", "../data/img/", "../data/random/"]
+    
+    ## Calculate normal, second- and third- block order entropy values for files
     for dir in dirs:
         print(f"Processing folder {dir}...")
         entropies = process_folder(dir)
         results.extend(entropies)
-    
     print("Entropy values:")
     for file, entropy in results:
-        print(f"File {file}: {entropy}")
+        print(f"File {file}: \tEntropy {round(entropy[0],3)} \t| Entropy second {round(entropy[1],3)} \t| Entropy third {round(entropy[2],3)}")
 
+
+    ## Create separate histograms for each file
+    #for dir in dirs:
+    #    hist_for_files(dir)
+        
     plt.show()
