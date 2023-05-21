@@ -10,6 +10,7 @@
 		"editor.formatOnSave": true,
 		"files.eol": "\n",
 		"rust-analyzer.procMacro.attributes.enable": true,
+		"autoDocstring.docstringFormat": "sphinx"
 	},
 	"extensions": {
 		"recommendations": [
@@ -20,7 +21,8 @@
 			"polymeilex.wgsl",
 			"mhutchie.git-graph",
 			"waderyan.gitblame",
-			"tamasfe.even-better-toml"
+			"tamasfe.even-better-toml",
+			"njpwerner.autodocstring"
 		]
 	}
 }
