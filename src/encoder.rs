@@ -5,7 +5,10 @@ use std::{
 };
 
 use crate::{
-    encoder_reader::EncoderReader, index_offset::IndexMapper, utility::find_largest_subset,
+    bit_writer::{BitWrite, BitWriter},
+    encoder_reader::EncoderReader,
+    index_offset::IndexMapper,
+    utility::find_largest_subset,
 };
 
 pub struct LzssOptions {
@@ -26,11 +29,12 @@ impl LzssOptions {
         source: &mut impl Read,
         destination: &mut impl Write,
     ) -> io::Result<usize> {
+        let mut destination = BitWriter::new(Box::new(destination));
         let mut buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
-        LzssSymbol::S(buffer[0]).write(destination)?;
+        LzssSymbol::S(buffer[0]).write(&mut destination)?;
 
         let mut written = 0;
-        while let Ok(newly_written) = self.encode_one(&mut buffer, destination) {
+        while let Ok(newly_written) = self.encode_one(&mut buffer, &mut destination) {
             written += newly_written
         }
 
@@ -40,7 +44,7 @@ impl LzssOptions {
     fn encode_one(
         &self,
         buffer: &mut EncoderReader,
-        destination: &mut impl Write,
+        destination: &mut impl BitWrite,
     ) -> io::Result<usize> {
         let (start, size) = find_largest_subset(
             buffer,
@@ -67,16 +71,21 @@ enum LzssSymbol {
 }
 
 impl LzssSymbol {
-    const S_SIZE: usize = size_of::<u8>() * 2;
-    const PC_SIZE: usize = size_of::<u8>() + size_of::<u8>() * 2;
+    const S_SIZE: usize = 1 + size_of::<u8>();
+    const PC_SIZE: usize = 1 + 2 * size_of::<u8>();
 
-    fn write(&self, destination: &mut impl Write) -> io::Result<()> {
+    fn write(&self, destination: &mut impl BitWrite) -> io::Result<()> {
         match *self {
-            LzssSymbol::S(s) => destination.write_all(&[0u8, s]),
+            LzssSymbol::S(s) => {
+                destination.write_bit(false)?;
+                destination.write_byte(s);
+                Ok(())
+            }
             LzssSymbol::PC(p, c) => {
-                destination.write_all(&[1u8])?;
-                destination.write_all(&p.to_be_bytes())?;
-                destination.write_all(&c.to_be_bytes())
+                destination.write_bit(true)?;
+                destination.write_byte(p)?;
+                destination.write_byte(c)?;
+                Ok(())
             }
         }
     }
