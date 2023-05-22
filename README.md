@@ -6,6 +6,19 @@ Simple LZSS implementation
 cargo run -- -i <input file> -o <output file>
 ```
 
+```
+LZSS encoder
+
+Usage: koda-lzss.exe [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>              Input file
+  -o, --output <OUTPUT>
+  -d, --dict-size <DICT_SIZE>      Dict size (max 256) [default: 256]
+  -b, --buffer-size <BUFFER_SIZE>  Input buffer size (max 256) [default: 256]
+  -h, --help                       Print help
+```
+
 # Decoder (in Python)
 
 Basic usage:
