@@ -2,17 +2,11 @@ mod bit_writer;
 mod encoder;
 mod encoder_reader;
 mod index_offset;
-mod rand_source;
 mod utility;
 
 use clap::Parser;
 use encoder::LzssOptions;
 use std::{fs::File, path::PathBuf};
-//use rand_source::RandomSource;
-
-// add clap
-// -i input file
-// -o output file
 
 /// LZSS encoder
 #[derive(Parser, Debug)]
@@ -28,7 +22,7 @@ struct Args {
     #[arg(short, long, default_value_t = 256)]
     dict_size: usize,
     /// Input buffer size (max 256)
-    #[arg(short, long, default_value_t = 256)]
+    #[arg(short, long, default_value_t = 16)]
     buffer_size: usize,
 }
 
@@ -45,5 +39,6 @@ fn main() {
         "This implementation only supports up to 255 input buffeer addresses"
     );
     let lzss = LzssOptions::new(args.dict_size, args.buffer_size);
-    lzss.encode(&mut file_input, &mut file_output).unwrap();
+    let (read, written) = lzss.encode(&mut file_input, &mut file_output).unwrap();
+    println!("Compressed {} bytes into {}.", read, written);
 }

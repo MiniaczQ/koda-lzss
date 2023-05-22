@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Read, Write},
-    mem::size_of,
-};
+use std::io::{self, Read, Write};
 
 use crate::{
     bit_writer::{BitWrite, BitWriter},
@@ -27,46 +24,56 @@ impl LzssOptions {
         &self,
         source: &mut impl Read,
         destination: &mut impl Write,
-    ) -> io::Result<usize> {
+    ) -> io::Result<(usize, usize)> {
         let mut destination = BitWriter::new(Box::new(destination));
         let mut buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
         LzssSymbol::S(buffer[0]).write(&mut destination)?;
 
-        let mut written = 0;
-        while let Some(newly_written) = self.encode_one(&mut buffer, &mut destination)? {
-            written += newly_written;
-        }
-        written += destination.flush()?;
+        let mut read_total = 0;
+        let mut written_total = 0;
+        loop {
+            let (read, written) = self.encode_one(&mut buffer, &mut destination)?;
+            read_total += read;
+            written_total += written;
 
-        Ok(written)
+            if self.buff_size == buffer.missing() {
+                break;
+            }
+
+            if read == 0 {
+                break;
+            }
+        }
+        written_total += destination.flush()?;
+
+        Ok((read_total, written_total))
     }
 
     fn encode_one(
         &self,
         buffer: &mut EncoderReader,
         destination: &mut impl BitWrite,
-    ) -> io::Result<Option<usize>> {
-        let remaining_buffer = self.buff_size - buffer.missing();
-        if remaining_buffer == 0 {
-            return Ok(None);
-        }
-
+    ) -> io::Result<(usize, usize)> {
         let (start, size) = find_largest_subset(
             buffer,
             self.dict_size,
             &IndexMapper::new(buffer, self.dict_size),
-            remaining_buffer,
+            self.buff_size - buffer.missing(),
         );
 
-        Ok(if LzssSymbol::PC_BIT_SIZE < size * 8 {
-            let written = LzssSymbol::PC(start as u8, size as u8).write(destination)?;
-            buffer.load(size)?;
-            Some(written)
+        let mut read = 0;
+        let mut written = 0;
+
+        if LzssSymbol::PC_BIT_SIZE < size * 8 {
+            read += buffer.load(size)?;
+            written += LzssSymbol::PC(start as u8, size as u8).write(destination)?;
         } else {
-            let written = LzssSymbol::S(buffer[self.dict_size]).write(destination)?;
-            buffer.load(1)?;
-            Some(written)
-        })
+            let symbol = buffer[self.dict_size];
+            read += buffer.load(1)?;
+            written += LzssSymbol::S(symbol).write(destination)?;
+        };
+
+        Ok((read, written))
     }
 }
 
@@ -76,7 +83,6 @@ enum LzssSymbol {
 }
 
 impl LzssSymbol {
-    const S_BIT_SIZE: usize = 9;
     const PC_BIT_SIZE: usize = 17;
 
     fn write(&self, destination: &mut impl BitWrite) -> io::Result<usize> {

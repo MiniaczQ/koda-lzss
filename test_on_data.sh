@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CODER='./koda-lzss.exe'
+CODER='./target/debug/koda-lzss.exe'
 DECODER='python py/decoder.py'
 
 function test_file {

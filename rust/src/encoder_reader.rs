@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     io::{self, Read},
     ops::Index,
 };
@@ -40,42 +39,41 @@ impl<'a> EncoderReader<'a> {
     }
 
     #[must_use]
-    fn load_to_end(&mut self) -> io::Result<bool> {
+    fn load_to_end(&mut self, target: usize) -> io::Result<usize> {
+        assert_ne!(0, target, "a");
         let write_buffer = &mut self.buffer[self.offset..];
-        let n = self.source.read(write_buffer)?;
-        self.missing += write_buffer.len() - n;
-        if self.missing > 0 {
-            self.offset += n;
-            Ok(false)
-        } else {
-            self.offset = 0;
-            Ok(true)
-        }
+        assert_eq!(write_buffer.len(), target);
+        let actual = self.source.read(write_buffer)?;
+        self.missing += target - actual;
+        self.offset += actual;
+        self.offset %= self.size;
+        Ok(actual)
     }
 
     #[must_use]
-    fn load_from_start(&mut self, n: usize) -> io::Result<()> {
-        let write_buffer = &mut self.buffer[self.offset..self.offset + n];
-        let m = self.source.read(write_buffer)?;
-        self.missing += n - m;
-        self.offset += n;
-        Ok(())
+    fn load_from_start(&mut self, target: usize) -> io::Result<usize> {
+        let write_buffer = &mut self.buffer[self.offset..self.offset + target];
+        assert_eq!(write_buffer.len(), target);
+        let actual = self.source.read(write_buffer)?;
+        self.missing += target - actual;
+        self.offset += actual;
+        Ok(actual)
     }
 
-    pub fn load(&mut self, n: usize) -> io::Result<()> {
-        if self.size < n {
-            panic!("Cannot read more bytes than buffer can contain");
-        }
-        let new_offs = self.offset + n;
-        if new_offs > self.size {
-            if !(self.load_to_end()?) {
-                return Ok(());
-            }
-            self.load_from_start(new_offs % self.size)?;
+    pub fn load(&mut self, target: usize) -> io::Result<usize> {
+        assert!(target < self.size);
+        let mut actual = 0;
+        let next_offset = self.offset + target;
+        let to_end = self.size - self.offset;
+        if next_offset == self.size {
+            actual += self.load_to_end(to_end)?;
+        } else if next_offset >= self.size {
+            actual += self.load_to_end(to_end)?;
+            actual += self.load_from_start(target - to_end)?;
         } else {
-            self.load_from_start(n)?;
+            actual += self.load_from_start(target)?;
         }
-        Ok(())
+        Ok(actual)
     }
 
     pub fn missing(&self) -> usize {
