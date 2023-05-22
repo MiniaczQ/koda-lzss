@@ -69,6 +69,10 @@ class SlidingWindow:
         if self._inserted_count < len(self._buffer):
             self._inserted_count += 1
 
+    def insert_multiple(self, characters: bytes):
+        for character in characters:
+            self.insert(character)
+
     def at(self, position: int, length: int) -> bytearray:
         if self._distance_from_end:
             assert 0 <= length <= self._inserted_count
@@ -175,19 +179,28 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig):
             distance = bits_from_bytes(buffer, config.distance_width)
             length = bits_from_bytes(buffer, config.length_width)
             length += config.length_bias
-            output_file.write(window.at(distance, length))
+            referenced_characters = window.at(distance, length)
+            window.insert_multiple(referenced_characters)
+            output_file.write(referenced_characters)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='LZSS decoder')
+    parser = argparse.ArgumentParser(description='LZSS sliding window decoder')
     parser.add_argument('input_file', type=argparse.FileType('rb'), nargs='?', help='Input file (to be decoded)')
     parser.add_argument('output_file', type=argparse.FileType('wb'), nargs='?', help='Output file (target)')
+    parser.add_argument('--window-size', '-w', type=int, default=256, help='Sliding window size (in bytes)')
+    parser.add_argument('--length-width', '-l', type=int, default=8, help='Reference length width (in bits)')
+    parser.add_argument('--length-bias', '-b', type=int, default=0, help='Reference length bias')
+    parser.add_argument('--distance-width', type=int, default=0, help='Reference distance width (in bits); zero means auto')
+    parser.add_argument('--flag-width', type=int, default=1, help='Flag width (in bits)')
+    parser.add_argument('--invert-flag', action='store_true', help='Treat zero as literal flag and others as reference flag')
+    parser.add_argument('--back-distance', action='store_true', help='Count distance from the end of the window')
     args = parser.parse_args()
 
     input_file = args.input_file if args.input_file is not None else sys.stdin.buffer
     output_file = args.output_file if args.output_file is not None else sys.stdout.buffer
     # input_file = open(r'D:\Programowanie\studia\KODA\koda-lzss\py\examples\aaaaaaaaaaaaaaa.lzss', 'rb')
     # output_file = sys.stdout.buffer
-    config = LzssConfig(256, 8, 3, flag_zero_means_literal=False)
+    config = LzssConfig(args.window_size, args.length_width, args.length_bias, args.distance_width, args.flag_width, not args.invert_flag, args.back_distance)
     decode(input_file, output_file, config)
  
