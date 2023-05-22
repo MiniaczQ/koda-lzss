@@ -14,7 +14,7 @@ function test_file {
     echo "  (decoding...)"
     ${DECODER} "$1" "test/${decoded_name}"
     echo "  (diffing...)"
-    diff -s "$1" "test/${decoded_name}"
+    diff -sq "$1" "test/${decoded_name}"
     echo ""
 }
 export -f test_file
