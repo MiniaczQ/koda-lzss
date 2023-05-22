@@ -12,7 +12,7 @@ function test_file {
     echo "  (coding...)"
     ${CODER} -i "$1" -o "test/${coded_name}"
     echo "  (decoding...)"
-    ${DECODER} "$1" "test/${decoded_name}"
+    ${DECODER} "test/${coded_name}" "test/${decoded_name}"
     echo "  (diffing...)"
     diff -sq "$1" "test/${decoded_name}"
     echo ""
