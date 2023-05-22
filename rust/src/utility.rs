@@ -8,23 +8,24 @@ pub fn find_largest_subset(
 ) -> (usize, usize) {
     let (mut final_start, mut final_size): (usize, usize) = (0, 0);
 
-    let mut start: usize = 0;
-    while start < a_size - final_size && final_size < b_size {
+    let mut start_ptr: usize = 0;
+    while start_ptr < a_size - final_size && final_size < b_size {
         let mut size: usize = 0;
-        while size < b_size && a[start + size] == b[size] {
+        while size < b_size && start_ptr + size < a_size && a[start_ptr + size] == b[size] {
             size += 1;
         }
 
         if size > final_size {
-            (final_start, final_size) = (start, size);
+            (final_start, final_size) = (start_ptr, size);
         }
 
-        start += 1;
+        start_ptr += 1;
     }
 
     (final_start, final_size)
 }
 
+#[cfg(test)]
 mod tests {
     use crate::utility::find_largest_subset;
 

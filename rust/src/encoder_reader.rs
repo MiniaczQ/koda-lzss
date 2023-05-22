@@ -1,6 +1,6 @@
 use std::{
+    fmt::Display,
     io::{self, Read},
-    mem::swap,
     ops::Index,
 };
 
@@ -9,10 +9,11 @@ pub struct EncoderReader<'a> {
     size: usize,
     buffer: Vec<u8>,
     offset: usize,
+    missing: usize,
 }
 
 impl<'a> EncoderReader<'a> {
-    pub fn new(read: &'a mut impl Read, dict_size: usize, buff_size: usize) -> io::Result<Self> {
+    pub fn new(source: &'a mut impl Read, dict_size: usize, buff_size: usize) -> io::Result<Self> {
         let size = dict_size + buff_size;
         // memory layout
         // [dictionary][input]
@@ -21,44 +22,64 @@ impl<'a> EncoderReader<'a> {
         // also fill input buffer
         // [dictionary][input]
         // ___________12345678
-        read.read_exact(&mut buff[dict_size - 1..])?;
+        let write_buffer = &mut buff[dict_size - 1..];
+        let n = source.read(write_buffer)?;
+        let missing = write_buffer.len() - n;
         // fill dictionary
         // [dictionary][input]
         // 1111111111112345678
         let char = buff[dict_size - 1];
         buff[0..dict_size - 1].fill(char);
         Ok(Self {
-            source: read,
+            source,
             size,
             buffer: buff,
             offset: 0,
+            missing,
         })
     }
 
     #[must_use]
-    fn load_to_end(&mut self) -> io::Result<()> {
-        self.source.read_exact(&mut self.buffer[self.offset..])?;
-        self.offset = 0;
-        Ok(())
+    fn load_to_end(&mut self) -> io::Result<bool> {
+        let write_buffer = &mut self.buffer[self.offset..];
+        let n = self.source.read(write_buffer)?;
+        self.missing += write_buffer.len() - n;
+        if self.missing > 0 {
+            self.offset += n;
+            Ok(false)
+        } else {
+            self.offset = 0;
+            Ok(true)
+        }
     }
 
     #[must_use]
     fn load_from_start(&mut self, n: usize) -> io::Result<()> {
-        self.source.read_exact(&mut self.buffer[..n])?;
-        self.offset = n;
+        let write_buffer = &mut self.buffer[self.offset..self.offset + n];
+        let m = self.source.read(write_buffer)?;
+        self.missing += n - m;
+        self.offset += n;
         Ok(())
     }
 
-    pub fn load(&mut self, mut n: usize) -> io::Result<()> {
+    pub fn load(&mut self, n: usize) -> io::Result<()> {
         if self.size < n {
             panic!("Cannot read more bytes than buffer can contain");
         }
         let new_offs = self.offset + n;
         if new_offs > self.size {
-            self.load_to_end()?;
+            if !(self.load_to_end()?) {
+                return Ok(());
+            }
+            self.load_from_start(new_offs % self.size)?;
+        } else {
+            self.load_from_start(n)?;
         }
-        self.load_from_start(new_offs % self.size)?;
         Ok(())
+    }
+
+    pub fn missing(&self) -> usize {
+        self.missing
     }
 }
 
