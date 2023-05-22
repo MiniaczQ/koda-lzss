@@ -58,23 +58,7 @@ impl LzssOptions {
             remaining_buffer,
         );
 
-        if size > 0 {
-            println!("{} {}", start, size);
-        }
-
         Ok(if LzssSymbol::PC_BIT_SIZE < size * 8 {
-            println!(
-                "used: {}",
-                (start as usize..start as usize + size as usize)
-                    .map(|i| buffer[i] as char)
-                    .collect::<String>()
-            );
-            println!(
-                "from: {}",
-                ((start as usize).min(240)..self.dict_size)
-                    .map(|i| buffer[i] as char)
-                    .collect::<String>()
-            );
             let written = LzssSymbol::PC(start as u8, size as u8).write(destination)?;
             buffer.load(size)?;
             Some(written)
