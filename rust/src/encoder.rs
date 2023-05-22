@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std::{
+    fmt::Debug,
+    io::{self, Read, Write},
+};
 
 use crate::{
     bit_writer::{BitWrite, BitWriter},
@@ -20,27 +23,26 @@ impl LzssOptions {
         }
     }
 
-    pub fn encode(
+    pub fn encode<Reader>(
         &self,
-        source: &mut impl Read,
+        source: &mut Reader,
         destination: &mut impl Write,
-    ) -> io::Result<(usize, usize)> {
+    ) -> io::Result<(usize, usize)>
+    where
+        Reader: Read + Debug,
+    {
         let mut destination = BitWriter::new(Box::new(destination));
-        let mut buffer = EncoderReader::new(source, self.dict_size, self.buff_size)?;
+        let mut buffer = EncoderReader::<Reader>::new(source, self.dict_size, self.buff_size)?;
         LzssSymbol::S(buffer[0]).write(&mut destination)?;
 
-        let mut read_total = 0;
+        let mut read_total = self.buff_size - buffer.missing();
         let mut written_total = 0;
         loop {
             let (read, written) = self.encode_one(&mut buffer, &mut destination)?;
             read_total += read;
             written_total += written;
 
-            if self.buff_size == buffer.missing() {
-                break;
-            }
-
-            if read == 0 {
+            if self.buff_size == buffer.missing() && read == 0 {
                 break;
             }
         }
@@ -49,11 +51,14 @@ impl LzssOptions {
         Ok((read_total, written_total))
     }
 
-    fn encode_one(
+    fn encode_one<Reader>(
         &self,
-        buffer: &mut EncoderReader,
+        buffer: &mut EncoderReader<Reader>,
         destination: &mut impl BitWrite,
-    ) -> io::Result<(usize, usize)> {
+    ) -> io::Result<(usize, usize)>
+    where
+        Reader: Read + Debug,
+    {
         let (start, size) = find_largest_subset(
             buffer,
             self.dict_size,

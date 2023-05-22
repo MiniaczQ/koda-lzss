@@ -1,18 +1,22 @@
 use std::{
+    fmt::Debug,
     io::{self, Read},
     ops::Index,
 };
 
-pub struct EncoderReader<'a> {
-    source: &'a mut dyn Read,
+pub struct EncoderReader<'a, Reader> {
+    source: &'a mut Reader,
     size: usize,
     buffer: Vec<u8>,
     offset: usize,
     missing: usize,
 }
 
-impl<'a> EncoderReader<'a> {
-    pub fn new(source: &'a mut impl Read, dict_size: usize, buff_size: usize) -> io::Result<Self> {
+impl<'a, Reader> EncoderReader<'a, Reader>
+where
+    Reader: Read + Debug,
+{
+    pub fn new(source: &'a mut Reader, dict_size: usize, buff_size: usize) -> io::Result<Self> {
         let size = dict_size + buff_size;
         // memory layout
         // [dictionary][input]
@@ -21,9 +25,10 @@ impl<'a> EncoderReader<'a> {
         // also fill input buffer
         // [dictionary][input]
         // ___________12345678
-        let write_buffer = &mut buff[dict_size - 1..];
-        let n = source.read(write_buffer)?;
-        let missing = write_buffer.len() - n;
+        source.read_exact(&mut buff[dict_size - 1..dict_size])?;
+        let write_buffer = &mut buff[dict_size..];
+        let actual = source.read(write_buffer)?;
+        let missing = write_buffer.len() - actual;
         // fill dictionary
         // [dictionary][input]
         // 1111111111112345678
@@ -45,7 +50,7 @@ impl<'a> EncoderReader<'a> {
         assert_eq!(write_buffer.len(), target);
         let actual = self.source.read(write_buffer)?;
         self.missing += target - actual;
-        self.offset += actual;
+        self.offset += target;
         self.offset %= self.size;
         Ok(actual)
     }
@@ -56,7 +61,7 @@ impl<'a> EncoderReader<'a> {
         assert_eq!(write_buffer.len(), target);
         let actual = self.source.read(write_buffer)?;
         self.missing += target - actual;
-        self.offset += actual;
+        self.offset += target;
         Ok(actual)
     }
 
@@ -81,7 +86,7 @@ impl<'a> EncoderReader<'a> {
     }
 }
 
-impl<'a> Index<usize> for EncoderReader<'a> {
+impl<'a, Reader> Index<usize> for EncoderReader<'a, Reader> {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
