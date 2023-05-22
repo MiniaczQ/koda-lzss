@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from math import ceil, floor, log2
+from math import ceil, floor, log2, sqrt
 import sys
 from typing import BinaryIO
 
@@ -146,8 +146,24 @@ def bits_from_bytes(buffer: BitBuffer, length: int) -> int:
     value += bits_from_byte(buf[0], 0, post_bits)
     return value
 
+def print_debug(index: int, is_literal: bool, symbol: tuple[int] | tuple[int, int], config: LzssConfig, window: SlidingWindow | None):
+    flag = 1 if (is_literal != config.flag_zero_means_literal) else 0
+    if len(symbol) == 2:
+        characters = window.at(symbol[0], symbol[1]) if window is not None else bytes([])
+        symbol_with_flag = (flag, ) + symbol
+    else:
+        characters = bytes([symbol[0]])
+        symbol_with_flag = (flag, chr(symbol[0]))
+    print(f'#{index}', file=sys.stderr)
+    print(f' symbol:       {symbol_with_flag}', file=sys.stderr)
+    print(f' characters:   {characters.decode("ansi", "ignore")}', file=sys.stderr)
+    if window is not None:
+        print(f' window[-10:]: {window.at(config.window_size - 10, 10).decode("ansi", "ignore")}', file=sys.stderr)
+    print(file=sys.stderr)
 
-def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig):
+
+def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig, debug=False):
+    debug_index = 0
     buffer = BitBuffer()
     is_literal = (lambda flag: flag == 0) if config.flag_zero_means_literal else (lambda flag: flag != 0)
     if config.distance_width < 1:
@@ -162,6 +178,9 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig):
     flag = bits_from_bytes(buffer, config.flag_width)
     assert is_literal(flag)
     first_character = bits_from_bytes(buffer, BITS_IN_BYTE)
+    if debug:
+        print_debug(debug_index, True, (first_character, ), config, None)
+        debug_index += 1
     window = SlidingWindow(config.window_size, first_character)
     output_file.write(bytes([first_character]))
 
@@ -173,12 +192,18 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig):
         flag = bits_from_bytes(buffer, config.flag_width)
         if is_literal(flag):
             literal = bits_from_bytes(buffer, BITS_IN_BYTE)
+            if debug:
+                print_debug(debug_index, True, (literal, ), config, window)
+                debug_index += 1
             window.insert(literal)
             output_file.write(bytes([literal]))
         else:
             distance = bits_from_bytes(buffer, config.distance_width)
             length = bits_from_bytes(buffer, config.length_width)
             length += config.length_bias
+            if debug:
+                print_debug(debug_index, False, (distance, length), config, window)
+                debug_index += 1
             referenced_characters = window.at(distance, length)
             window.insert_multiple(referenced_characters)
             output_file.write(referenced_characters)
@@ -195,6 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('--flag-width', type=int, default=1, help='Flag width (in bits)')
     parser.add_argument('--invert-flag', action='store_true', help='Treat zero as literal flag and others as reference flag')
     parser.add_argument('--back-distance', action='store_true', help='Count distance from the end of the window')
+    parser.add_argument('--debug', action='store_true', help='Run in debug mode')
     args = parser.parse_args()
 
     input_file = args.input_file if args.input_file is not None else sys.stdin.buffer
@@ -202,5 +228,5 @@ if __name__ == '__main__':
     # input_file = open(r'D:\Programowanie\studia\KODA\koda-lzss\py\examples\aaaaaaaaaaaaaaa.lzss', 'rb')
     # output_file = sys.stdout.buffer
     config = LzssConfig(args.window_size, args.length_width, args.length_bias, args.distance_width, args.flag_width, not args.invert_flag, args.back_distance)
-    decode(input_file, output_file, config)
+    decode(input_file, output_file, config, args.debug)
  
