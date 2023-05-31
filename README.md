@@ -3,7 +3,7 @@ Simple LZSS implementation
 # Encoder (in Rust)
 
 ```sh
-cargo run -- -i <input file> -o <output file>
+cargo run --bin encoder -- -i <input file> -o <output file>
 ```
 
 ```

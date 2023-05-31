@@ -46,7 +46,7 @@ impl LzssOptions {
                 break;
             }
         }
-        written_total += destination.flush()?;
+        written_total += destination.end_flush()?;
 
         Ok((read_total, written_total))
     }
