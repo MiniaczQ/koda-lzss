@@ -9,14 +9,19 @@ cargo run --bin encoder -- -i <input file> -o <output file>
 ```
 LZSS encoder
 
-Usage: koda-lzss.exe [OPTIONS] --input <INPUT> --output <OUTPUT>
+Usage: encoder.exe [OPTIONS] <INPUT> <OUTPUT>
+
+Arguments:
+  <INPUT>   Input file
+  <OUTPUT>  Output file
 
 Options:
-  -i, --input <INPUT>              Input file
-  -o, --output <OUTPUT>
-  -d, --dict-size <DICT_SIZE>      Dict size (max 256) [default: 256]
-  -b, --buffer-size <BUFFER_SIZE>  Input buffer size (max 256) [default: 256]
-  -h, --help                       Print help
+  -d, --dictionary-bits <DICTIONARY_BITS>  Dictionary indexing bits [default: 8]
+  -m, --max-match-bits <MAX_MATCH_BITS>    Dictionary size bits [default: 8]
+      --dictionary-size <DICTIONARY_SIZE>  Dictionary buffer size
+      --max-match-size <MAX_MATCH_SIZE>    Max match size
+  -e                                       Can matches extend into the input buffer
+  -h, --help                               Print help
 ```
 
 # Decoder (in Python)

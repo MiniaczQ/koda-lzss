@@ -11,15 +11,27 @@ use crate::{
 };
 
 pub struct LzssOptions {
-    dict_size: usize,
-    buff_size: usize,
+    dictionary_bits: usize,
+    max_match_bits: usize,
+    dictionary_size: usize,
+    max_match_size: usize,
+    extend_into_input: bool,
 }
 
 impl LzssOptions {
-    pub fn new(dict_size: usize, buff_size: usize) -> Self {
+    pub fn new(
+        dictionary_bits: usize,
+        max_match_bits: usize,
+        dictionary_size: usize,
+        max_match_size: usize,
+        extend_into_input: bool,
+    ) -> Self {
         Self {
-            dict_size,
-            buff_size,
+            dictionary_bits,
+            max_match_bits,
+            dictionary_size,
+            max_match_size,
+            extend_into_input,
         }
     }
 
@@ -32,17 +44,17 @@ impl LzssOptions {
         Reader: Read + Debug,
     {
         let mut destination = BitWriter::new(Box::new(destination));
-        let mut buffer = EncoderReader::<Reader>::new(source, self.dict_size, self.buff_size)?;
-        LzssSymbol::S(buffer[0]).write(&mut destination)?;
+        let mut buffer =
+            EncoderReader::<Reader>::new(source, self.dictionary_size, self.max_match_size)?;
+        let mut written_total = self.write_symbol(LzssSymbol::S(buffer[0]), &mut destination)?;
 
-        let mut read_total = self.buff_size - buffer.missing();
-        let mut written_total = 0;
+        let mut read_total = self.max_match_size - buffer.missing() + 1;
         loop {
             let (read, written) = self.encode_one(&mut buffer, &mut destination)?;
             read_total += read;
             written_total += written;
 
-            if self.buff_size == buffer.missing() && read == 0 {
+            if self.max_match_size == buffer.missing() && read == 0 {
                 break;
             }
         }
@@ -61,41 +73,49 @@ impl LzssOptions {
     {
         let (start, size) = find_largest_subset(
             buffer,
-            self.dict_size,
-            &IndexMapper::new(buffer, self.dict_size),
-            self.buff_size - buffer.missing(),
+            self.dictionary_size,
+            &IndexMapper::new(buffer, self.dictionary_size),
+            self.max_match_size - buffer.missing(),
+            self.extend_into_input,
         );
 
         let mut read = 0;
         let mut written = 0;
 
-        if LzssSymbol::PC_BIT_SIZE < size * 8 {
+        if self.dictionary_bits + self.max_match_bits + 1 < size * 8 {
             read += buffer.load(size)?;
-            written += LzssSymbol::PC(start as u8, size as u8).write(destination)?;
+            written += self.write_symbol(LzssSymbol::PC(start as u32, size as u32), destination)?;
         } else {
-            let symbol = buffer[self.dict_size];
+            let symbol = buffer[self.dictionary_size];
             read += buffer.load(1)?;
-            written += LzssSymbol::S(symbol).write(destination)?;
+            written += self.write_symbol(LzssSymbol::S(symbol), destination)?;
         };
 
         Ok((read, written))
     }
-}
 
-enum LzssSymbol {
-    S(u8),
-    PC(u8, u8),
-}
-
-impl LzssSymbol {
-    const PC_BIT_SIZE: usize = 17;
-
-    fn write(&self, destination: &mut impl BitWrite) -> io::Result<usize> {
-        match *self {
-            LzssSymbol::S(s) => Ok(destination.write_bit(false)? + destination.write_byte(s)?),
-            LzssSymbol::PC(p, c) => Ok(destination.write_bit(true)?
-                + destination.write_byte(p)?
-                + destination.write_byte(c)?),
+    fn write_symbol(
+        &self,
+        symbol: LzssSymbol,
+        destination: &mut impl BitWrite,
+    ) -> io::Result<usize> {
+        match symbol {
+            LzssSymbol::S(s) => {
+                //println!("char {:?}", s as char);
+                Ok(destination.write_bit(false)? + destination.write_few(s as usize, 8)?)
+            }
+            LzssSymbol::PC(p, c) => {
+                //println!("pair {:?} {:?}", p, c);
+                Ok(destination.write_bit(true)?
+                    + destination.write_few(p as usize, self.dictionary_bits)?
+                    + destination.write_few(c as usize, self.max_match_bits)?)
+            }
         }
     }
+}
+
+#[derive(Debug)]
+enum LzssSymbol {
+    S(u8),
+    PC(u32, u32),
 }

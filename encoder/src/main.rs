@@ -15,7 +15,7 @@ struct RawArgs {
     /// Input file
     #[arg()]
     input: PathBuf,
-    // Output fiile
+    /// Output file
     #[arg()]
     output: PathBuf,
     /// Dictionary indexing bits
@@ -30,15 +30,19 @@ struct RawArgs {
     /// Max match size
     #[arg(long)]
     max_match_size: Option<u32>,
+    /// Can matches extend into the input buffer
+    #[arg(short)]
+    extend_into_input: bool,
 }
 
 struct Args {
     input: PathBuf,
     output: PathBuf,
-    dictionary_bits: u8,
-    max_match_bits: u8,
+    dictionary_bits: usize,
+    max_match_bits: usize,
     dictionary_size: usize,
     max_match_size: usize,
+    extend_into_input: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -55,7 +59,7 @@ fn args() -> Result<Args, String> {
     if args.max_match_bits < 1 || args.max_match_bits > 30 {
         return Err("Max match bits have to be in range [1..30]".to_owned());
     }
-    let max_dictionary_size = 2 ^ args.dictionary_bits as u32;
+    let max_dictionary_size = 2u32.pow(args.dictionary_bits as u32);
     let dictionary_size = args.dictionary_size.unwrap_or(max_dictionary_size);
     if dictionary_size < 1 || dictionary_size > max_dictionary_size {
         return Err(format!(
@@ -63,7 +67,7 @@ fn args() -> Result<Args, String> {
             max_dictionary_size
         ));
     }
-    let max_max_match_size = 2 ^ args.max_match_bits as u32;
+    let max_max_match_size = 2u32.pow(args.max_match_bits as u32);
     let max_match_size = args.max_match_size.unwrap_or(max_max_match_size);
     if max_match_size < 1 || max_match_size > max_max_match_size {
         return Err(format!(
@@ -74,10 +78,11 @@ fn args() -> Result<Args, String> {
     Ok(Args {
         input: args.input,
         output: args.output,
-        dictionary_bits: args.dictionary_bits,
-        max_match_bits: args.max_match_bits,
+        dictionary_bits: args.dictionary_bits as usize,
+        max_match_bits: args.max_match_bits as usize,
         dictionary_size: dictionary_size as usize,
         max_match_size: max_match_size as usize,
+        extend_into_input: args.extend_into_input,
     })
 }
 
@@ -85,7 +90,13 @@ fn main() {
     let args = args().unwrap();
     let mut file_input = File::open(args.input).unwrap();
     let mut file_output = File::create(args.output).unwrap();
-    let lzss = LzssOptions::new(args.dictionary_size, args.max_match_size);
+    let lzss = LzssOptions::new(
+        args.dictionary_bits,
+        args.max_match_bits,
+        args.dictionary_size,
+        args.max_match_size,
+        args.extend_into_input,
+    );
     let (read, written) = lzss.encode(&mut file_input, &mut file_output).unwrap();
-    println!("Compressed {} bytes into {}.", read, written);
+    println!("Compressed {} bytes into {} bytes.", read, written);
 }
