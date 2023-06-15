@@ -60,14 +60,14 @@ class BitBuffer:
 
 class SlidingWindow:
     def __init__(self, size: int, fill: int = MIN_BYTE_VALUE, distance_from_end=False):
-        assert MIN_BYTE_VALUE <= fill <= MAX_BYTE_VALUE
+        assert MIN_BYTE_VALUE <= fill <= MAX_BYTE_VALUE, f'Initial character out of range [{MIN_BYTE_VALUE}, {MAX_BYTE_VALUE}]: {fill}'
         self._buffer = bytearray([fill] * size)
         self._first = 0
         self._distance_from_end = distance_from_end
         self._inserted_count = 0
     
     def insert(self, character: int):
-        assert MIN_BYTE_VALUE <= character <= MAX_BYTE_VALUE
+        assert MIN_BYTE_VALUE <= character <= MAX_BYTE_VALUE, f'Inserted character out of range [{MIN_BYTE_VALUE}, {MAX_BYTE_VALUE}]: {character}'
         self._buffer[self._first] = character
         self._first += 1
         if self._first >= len(self._buffer):
@@ -80,8 +80,8 @@ class SlidingWindow:
             self.insert(character)
 
     def at(self, position: int, length: int) -> bytearray:
+        assert 0 <= length <= len(self._buffer), f'Requested refererence length exceeds the size of dictionary ({len(self._buffer)}): {length}'
         if self._distance_from_end:
-            assert 0 <= length <= self._inserted_count
             position = self._first - 1 - position
             while position < 0:
                 position += len(self._buffer)
@@ -93,7 +93,6 @@ class SlidingWindow:
                 return to_end
             return to_end + self._buffer[:remaining_length]
         else:
-            assert 0 <= length <= len(self._buffer)
             position += self._first
             while position >= len(self._buffer):
                 position -= len(self._buffer)
@@ -113,8 +112,8 @@ def bits_from_byte(value: int, offset: int, length: int) -> int:
     :param length: Length in bits.
     :return: Unsigned integer in range [0; 2^`length`)
     '''
-    assert MIN_BYTE_VALUE <= value <= MAX_BYTE_VALUE
-    assert offset + length <= BITS_IN_BYTE
+    assert MIN_BYTE_VALUE <= value <= MAX_BYTE_VALUE, f'Byte value out of range [{MIN_BYTE_VALUE}, {MAX_BYTE_VALUE}]: {value}'
+    assert offset + length <= BITS_IN_BYTE, f'Requested bit count exceeds one byte ({BITS_IN_BYTE} bits): count {length}, bit offset {offset}'
     offset_mask = MAX_BYTE_VALUE >> offset
     shift = BITS_IN_BYTE - offset - length
     return (value & offset_mask) >> shift
@@ -130,7 +129,7 @@ def bits_from_bytes(buffer: BitBuffer, length: int) -> int:
     buf = buffer.buffer
     offset = buffer.offset
     bytes_needed = ceil((offset + length) / BITS_IN_BYTE)
-    assert len(buf) >= bytes_needed
+    assert len(buf) >= bytes_needed, f'Requested bit count exceeds the length of buffer ({len(buf)} bytes {BITS_IN_BYTE} bits each): count {length}, bit offset {offset}'
     buffer.add_offset(length)
 
     pre_bits = min(BITS_IN_BYTE - offset, length)
@@ -189,7 +188,7 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig, debu
     # read the first literal
     buffer.add_bytes(input_file.read(ceil(literal_code_word_width / BITS_IN_BYTE)))
     flag = bits_from_bytes(buffer, config.flag_width)
-    assert is_literal(flag)
+    assert is_literal(flag), f'First code word not encoding a literal: expected {0 if config.flag_zero_means_literal else "non-zero value"}, got {flag}'
     first_character = bits_from_bytes(buffer, BITS_IN_BYTE)
     if debug:
         print_debug(debug_index, (first_character, ), config, None)
@@ -207,7 +206,7 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig, debu
             print(f'Bits remaining in buffer: {buffer.remaining_bits}', file=sys.stderr)
         if buffer.remaining_bits < min_code_word_width:
             if debug:
-                print(f'Exiting due to insufficient number of bits', file=sys.stderr)
+                print(f'Exiting due to reaching EOF', file=sys.stderr)
             return  # EOF
         flag = bits_from_bytes(buffer, config.flag_width)
         if debug:

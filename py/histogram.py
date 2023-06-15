@@ -86,12 +86,12 @@ def calculate_n_order(data: np.ndarray, order_number: int) -> tuple[list[int], i
     :return: TODO: Return summary
     :rtype: tuple[list[int], int]
     """
-    block_pairs = {}
+    block_pairs: dict[int, int] = {}
     total_pairs = len(data) - order_number
     for i in range(total_pairs):
         key = data[i:i+order_number]
         block_pairs[key] = block_pairs[key] + 1 if key in block_pairs else 1
-    return block_pairs.values(), total_pairs
+    return list(block_pairs.values()), total_pairs
 
 
 def process_file(dir: str, name: str, axis: plt.Axes) -> tuple[float, float, float]:
