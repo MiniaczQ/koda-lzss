@@ -129,7 +129,7 @@ def bits_from_bytes(buffer: BitBuffer, length: int) -> int:
     '''
     buf = buffer.buffer
     offset = buffer.offset
-    bytes_needed = ceil(length / BITS_IN_BYTE) + (1 if offset > 0 else 0)
+    bytes_needed = ceil((offset + length) / BITS_IN_BYTE)
     assert len(buf) >= bytes_needed
     buffer.add_offset(length)
 
