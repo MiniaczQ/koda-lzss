@@ -3,6 +3,10 @@
 DISTANCE_BIT_WIDTH=${1:-8}
 LENGTH_BIT_WIDTH=${2:-8}
 
+echo
+echo "[Running tests for code words with ${DISTANCE_BIT_WIDTH}-bit distance and ${LENGTH_BIT_WIDTH}-bit length]"
+echo
+
 CODER="./target/debug/koda-lzss.exe -d ${DISTANCE_BIT_WIDTH} -m ${LENGTH_BIT_WIDTH}"
 DECODER="python py/decoder.py --window-size $((2 ** ${DISTANCE_BIT_WIDTH})) --length-width ${LENGTH_BIT_WIDTH}"
 
