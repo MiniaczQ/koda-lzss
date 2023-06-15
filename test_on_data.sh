@@ -17,9 +17,9 @@ function test_file {
     local dir="$(dirname "${coded_name}")"
     mkdir -p "test/${dir}"
     echo "  (coding...)"
-    ${CODER} "$1" "test/${coded_name}"
+    { time ${CODER} "$1" "test/${coded_name}" ;} 2>&1
     echo "  (decoding...)"
-    ${DECODER} "test/${coded_name}" "test/${decoded_name}"
+    { time ${DECODER} "test/${coded_name}" "test/${decoded_name}" ;} 2>&1
     echo "  (diffing...)"
     diff -sq "$1" "test/${decoded_name}"
     echo ""
