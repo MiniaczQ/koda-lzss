@@ -27,7 +27,8 @@ class BitBuffer:
         self._buffer = b''
         self._offset = 0
         self._remaining_bits = 0
-        self._total_bytes = 0
+        self._total_bytes_added = 0
+        self._total_bytes_removed = 0
     
     def add_offset(self, offset: int):
         self._offset += offset
@@ -35,11 +36,12 @@ class BitBuffer:
         removed_byte_count = floor(self._offset / BITS_IN_BYTE)
         self._buffer = self._buffer[removed_byte_count:]
         self._offset -= removed_byte_count * BITS_IN_BYTE
+        self._total_bytes_removed += removed_byte_count
     
     def add_bytes(self, b: bytes):
         self._buffer += b
         self._remaining_bits += len(b) * BITS_IN_BYTE
-        self._total_bytes += len(b)
+        self._total_bytes_added += len(b)
 
     @property
     def buffer(self):
@@ -54,8 +56,12 @@ class BitBuffer:
         return self._remaining_bits
 
     @property
-    def total_bytes(self):
-        return self._total_bytes
+    def total_bytes_added(self):
+        return self._total_bytes_added
+
+    @property
+    def total_bytes_removed(self):
+        return self._total_bytes_removed
 
 
 class SlidingWindow:
@@ -101,6 +107,24 @@ class SlidingWindow:
             if remaining_length == 0:
                 return to_end
             return to_end + self._buffer[:remaining_length]
+
+
+STRING_ESCAPES_MAP = {
+    code: (f'\\x{code:02x}' if code <= 31 or code >= 127 else chr(code))
+    for code
+    in range(256)
+} | {
+    ord('\0'): '\\0',
+    ord('\n'): '\\n',
+    ord('\r'): '\\r',
+    ord('\t'): '\\t',
+    ord('\b'): '\\b',
+    ord('\f'): '\\f',
+    ord('\v'): '\\v',
+}
+
+def to_readable_string(data: bytes) -> str:
+    return ''.join(STRING_ESCAPES_MAP[byte] for byte in data)
 
 
 def bits_from_byte(value: int, offset: int, length: int) -> int:
@@ -156,11 +180,10 @@ def print_debug(index: int, symbol: tuple[int] | tuple[int, int], config: LzssCo
     flag = 1 if (is_literal != config.flag_zero_means_literal) else 0
 
     print(f'#{index}', file=sys.stderr)
-    symbol_with_flag = (flag, chr(symbol[0])) if is_literal else ((flag, ) + symbol)
-    print(f' symbol:       {symbol_with_flag}', file=sys.stderr)
+    print(f' symbol:       {(flag, ) + symbol}', file=sys.stderr)
     characters = bytes([symbol[0]]) if is_literal else \
         window.at(symbol[0], symbol[1]) if window is not None else bytes([])
-    print(f' characters:   {characters.decode("ansi", "ignore")}', file=sys.stderr)
+    print(f' characters:   {to_readable_string(characters)}', file=sys.stderr)
     if window is not None:
         if config.window_size < 40:
             phrase = window.at(config.window_size if config.distance_from_end else config.window_size - config.window_size, config.window_size)
@@ -168,7 +191,7 @@ def print_debug(index: int, symbol: tuple[int] | tuple[int, int], config: LzssCo
             start_phrase = window.at(config.window_size - 20 if config.distance_from_end else 20, 20)
             end_phrase = window.at(20 if config.distance_from_end else config.window_size - 20, 20)
             phrase = start_phrase + b'...' + end_phrase
-        print(f' window[:20..-20:]: {phrase.decode("ansi", "ignore")}', file=sys.stderr)
+        print(f' window[:20..-20:]: {to_readable_string(phrase)}', file=sys.stderr)
     print(file=sys.stderr)
 
 
@@ -194,31 +217,32 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig, debu
         print_debug(debug_index, (first_character, ), config, None)
         debug_index += 1
     window = SlidingWindow(config.window_size, first_character, config.distance_from_end)
-    output_file.write(bytes([first_character]))
+    output_bytes_written = 0
+    output_bytes_written += output_file.write(bytes([first_character]))
 
     while True:
         if buffer.remaining_bits < max_code_word_width:
             read_bytes = input_file.read(BYTES_TO_READ_AT_ONCE)
             buffer.add_bytes(read_bytes)
             if debug:
-                print(f'Read {len(read_bytes)} bytes, current total: {buffer.total_bytes}', file=sys.stderr)
+                print(f'Read {len(read_bytes)} bytes, current total: {buffer.total_bytes_added}', file=sys.stderr)
         if debug:
             print(f'Bits remaining in buffer: {buffer.remaining_bits}', file=sys.stderr)
         if buffer.remaining_bits < min_code_word_width:
             if debug:
                 print(f'Exiting due to reaching EOF', file=sys.stderr)
-            return  # EOF
+            return
         flag = bits_from_bytes(buffer, config.flag_width)
         if debug:
             print(f'Read flag {flag}, bits remaining in buffer: {buffer.remaining_bits}', file=sys.stderr)
         if is_literal(flag):
             literal = bits_from_bytes(buffer, BITS_IN_BYTE)
             if debug:
-                print(f'Read literal {chr(literal)}, bits remaining in buffer: {buffer.remaining_bits}\n', file=sys.stderr)
+                print(f'Read literal {to_readable_string(bytes([literal]))}, bits remaining in buffer: {buffer.remaining_bits}\n', file=sys.stderr)
                 print_debug(debug_index, (literal, ), config, window)
                 debug_index += 1
             window.insert(literal)
-            output_file.write(bytes([literal]))
+            output_bytes_written += output_file.write(bytes([literal]))
         else:
             distance = bits_from_bytes(buffer, config.distance_width)
             if debug:
@@ -232,7 +256,9 @@ def decode(input_file: BinaryIO, output_file: BinaryIO, config: LzssConfig, debu
                 debug_index += 1
             referenced_characters = window.at(distance, length)
             window.insert_multiple(referenced_characters)
-            output_file.write(referenced_characters)
+            output_bytes_written += output_file.write(referenced_characters)
+        if debug:
+            print(f'Input position: {buffer.total_bytes_removed}, output position: {output_bytes_written}', file=sys.stderr)
 
 
 if __name__ == '__main__':
