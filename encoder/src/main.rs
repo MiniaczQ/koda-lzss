@@ -6,7 +6,7 @@ mod utility;
 
 use clap::Parser;
 use encoder::LzssOptions;
-use std::{fs::File, path::PathBuf};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 /// LZSS encoder
 #[derive(Parser, Debug)]
@@ -88,7 +88,7 @@ fn args() -> Result<Args, String> {
 
 fn main() {
     let args = args().unwrap();
-    let mut file_input = File::open(args.input).unwrap();
+    let mut file_input = BufReader::new(File::open(args.input).unwrap());
     let mut file_output = File::create(args.output).unwrap();
     let lzss = LzssOptions::new(
         args.dictionary_bits,
