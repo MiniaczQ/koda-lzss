@@ -75,43 +75,47 @@ def parse_sentences(sentences):
 
     return results
 
-def draw_heatmap_for_file(file_name:str, df:pd.DataFrame) -> None:
-    sub_df = df[df.filename == file_name]
-    
-    draw_heatmap(sub_df, "Compression Rate for: " + file_name, "compression_rate", vmax = 3.5, vmin = 0)
-    
-def cr_heatmap_generation( df:pd.DataFrame) -> None:
-    df["compression_rate"] = round(df["original_size"]/df["compressed_size"],3)
-    files_list = df.filename.unique()
-    for file in files_list:
-        draw_heatmap_for_file(file, df)
-        
 def make_delta(entry:str) -> datetime.timedelta:
     m, s = entry.split('m')
     s = s.replace('s', '') 
     return datetime.timedelta(minutes=float(m), seconds=float(s))
 
-def draw_time_heatmap(df:pd.DataFrame, way:str, title):
-    df["system_" + way + "_time"] = df["system_" + way + "_time"].apply(lambda entry: make_delta(entry))
-    df["user_" + way + "_time"] =   df["user_" + way + "_time"].apply(lambda entry: make_delta(entry))
-    df["real_" + way + "_time"] =   df["real_" + way + "_time"].apply(lambda entry: make_delta(entry))
-    df[way + "_time"] = df["system_" + way + "_time"] + df["user_" + way + "_time"] + df["real_" + way + "_time"]
-    new_df= df.groupby(["length", "distance"])[way + "_time"].mean().reset_index()
-    new_df[way + "_time_numeric"] = new_df[way + "_time"].dt.total_seconds()
-    draw_heatmap(new_df, title, way + "_time_numeric")
-    
-
-def draw_heatmap(df:pd.DataFrame, title:str, values:str, vmax:float = None, vmin:float = None):
+def draw_heatmap(df:pd.DataFrame, title:str, values:str, file_name:float = None, vmax:float = None, vmin:float = None):
     table = df.pivot(index="length", columns="distance", values= values)
     ax = sns.heatmap(table, vmax=vmax, vmin=vmin, cmap='RdYlGn_r', linewidths=0.5, annot=True)
     ax.invert_yaxis()
     plt.title(title)
     plt.xlabel('offset size [b]')
     plt.ylabel('match size [b]')
+    
+    if file_name is not None:
+        plt.savefig(file_name)
     plt.show()
 
-if __name__== "__main__":
-    file_name = "results_4_to_12_bits.txt"
+def cr_heatmap_generation( df:pd.DataFrame) -> None:
+    df["compression_rate"] = round(df["original_size"]/df["compressed_size"],3)
+    files_list = df.filename.unique()
+    for file in files_list:
+        draw_heatmap_for_file(file, df)
+        
+
+def draw_time_heatmap(df:pd.DataFrame, way:str, title:str, filename:str):
+    df["system_" + way + "_time"] = df["system_" + way + "_time"].apply(lambda entry: make_delta(entry))
+    df["user_" + way + "_time"] =   df["user_" + way + "_time"].apply(lambda entry: make_delta(entry))
+    df["real_" + way + "_time"] =   df["real_" + way + "_time"].apply(lambda entry: make_delta(entry))
+    df[way + "_time"] = df["system_" + way + "_time"] + df["user_" + way + "_time"] + df["real_" + way + "_time"]
+    new_df= df.groupby(["length", "distance"])[way + "_time"].mean().reset_index()
+    new_df[way + "_time_numeric"] = new_df[way + "_time"].dt.total_seconds()
+    draw_heatmap(new_df, title, way + "_time_numeric", filename)
+    
+def draw_heatmap_for_file(file_name:str, df:pd.DataFrame) -> None:
+    sub_df = df[df.filename == file_name]
+    
+    file_pattern = "results/" + file_name.replace('.pgm', '_heatmap.png')
+    draw_heatmap(sub_df, "Compression Rate for: " + file_name, "compression_rate", file_pattern, vmax = 3.5, vmin = 0)
+    
+def main():
+    file_name = "results_up_to_13_bits.txt"
     
     lines = read_file(file_name)
     results = parse_sentences(lines)
@@ -119,11 +123,14 @@ if __name__== "__main__":
     df = pd.DataFrame.from_records(results)
     
     # CR heatmap generation
-    #cr_heatmap_generation(df)
+    cr_heatmap_generation(df)
     
     # Times heatmap
-    draw_time_heatmap(df, "coding", "Encoding times [s]")
-    draw_time_heatmap(df, "decoding", "Decoding times [s]")
+    draw_time_heatmap(df, "coding", "Encoding times [s]", "results/deco_map.png")
+    draw_time_heatmap(df, "decoding", "Decoding times [s]", "results/enco_map.png")
+    
+if __name__== "__main__":
+    main()
 
     
     
