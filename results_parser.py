@@ -115,7 +115,7 @@ def draw_heatmap_for_file(file_name:str, df:pd.DataFrame) -> None:
     draw_heatmap(sub_df, "Compression Rate for: " + file_name, "compression_rate", file_pattern, vmax = 3.5, vmin = 0)
     
 def main():
-    file_name = "results_up_to_13_bits.txt"
+    file_name = "results.txt"
     
     lines = read_file(file_name)
     results = parse_sentences(lines)
