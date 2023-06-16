@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np 
 import seaborn as sns
 import matplotlib.pyplot as plt
+import datetime
 
 def read_file(file_name: str) -> list[str]:
     with open(file_name, "r") as results:
@@ -76,21 +77,38 @@ def parse_sentences(sentences):
 
 def draw_heatmap_for_file(file_name:str, df:pd.DataFrame) -> None:
     sub_df = df[df.filename == file_name]
-    table = sub_df.pivot(index="length", columns="distance", values="compression_rate")
     
-    ax = sns.heatmap(table, vmax=3.5, vmin=0, cmap='RdYlGn_r', linewidths=0.5, annot=True)
-    ax.invert_yaxis()
-    plt.title("Compression Rate for: " + file_name)
-    plt.xlabel('offset size [b]')
-    plt.ylabel('match size [b]')
-    plt.show()
+    draw_heatmap(sub_df, "Compression Rate for: " + file_name, "compression_rate", vmax = 3.5, vmin = 0)
     
 def cr_heatmap_generation( df:pd.DataFrame) -> None:
     df["compression_rate"] = round(df["original_size"]/df["compressed_size"],3)
     files_list = df.filename.unique()
     for file in files_list:
         draw_heatmap_for_file(file, df)
+        
+def make_delta(entry:str) -> datetime.timedelta:
+    m, s = entry.split('m')
+    s = s.replace('s', '') 
+    return datetime.timedelta(minutes=float(m), seconds=float(s))
 
+def draw_time_heatmap(df:pd.DataFrame, way:str, title):
+    df["system_" + way + "_time"] = df["system_" + way + "_time"].apply(lambda entry: make_delta(entry))
+    df["user_" + way + "_time"] =   df["user_" + way + "_time"].apply(lambda entry: make_delta(entry))
+    df["real_" + way + "_time"] =   df["real_" + way + "_time"].apply(lambda entry: make_delta(entry))
+    df[way + "_time"] = df["system_" + way + "_time"] + df["user_" + way + "_time"] + df["real_" + way + "_time"]
+    new_df= df.groupby(["length", "distance"])[way + "_time"].mean().reset_index()
+    new_df[way + "_time_numeric"] = new_df[way + "_time"].dt.total_seconds()
+    draw_heatmap(new_df, title, way + "_time_numeric")
+    
+
+def draw_heatmap(df:pd.DataFrame, title:str, values:str, vmax:float = None, vmin:float = None):
+    table = df.pivot(index="length", columns="distance", values= values)
+    ax = sns.heatmap(table, vmax=vmax, vmin=vmin, cmap='RdYlGn_r', linewidths=0.5, annot=True)
+    ax.invert_yaxis()
+    plt.title(title)
+    plt.xlabel('offset size [b]')
+    plt.ylabel('match size [b]')
+    plt.show()
 
 if __name__== "__main__":
     file_name = "results_4_to_12_bits.txt"
@@ -101,8 +119,12 @@ if __name__== "__main__":
     df = pd.DataFrame.from_records(results)
     
     # CR heatmap generation
-    cr_heatmap_generation(df)
+    #cr_heatmap_generation(df)
     
+    # Times heatmap
+    draw_time_heatmap(df, "coding", "Encoding times [s]")
+    draw_time_heatmap(df, "decoding", "Decoding times [s]")
+
     
     
     
