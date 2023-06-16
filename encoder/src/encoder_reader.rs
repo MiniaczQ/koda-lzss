@@ -43,23 +43,33 @@ where
         })
     }
 
-    #[must_use]
+    fn load_n_or_eof(source: &mut impl Read, dest: &mut [u8]) -> io::Result<usize> {
+        let mut read_total = 0;
+        loop {
+            let read = source.read(&mut dest[read_total..])?;
+            if read == 0 {
+                break;
+            }
+            read_total += read;
+        }
+        Ok(read_total)
+    }
+
     fn load_to_end(&mut self, target: usize) -> io::Result<usize> {
         assert_ne!(0, target, "a");
         let write_buffer = &mut self.buffer[self.offset..];
         assert_eq!(write_buffer.len(), target);
-        let actual = self.source.read(write_buffer)?;
+        let actual = Self::load_n_or_eof(self.source, write_buffer)?;
         self.missing += target - actual;
         self.offset += target;
         self.offset %= self.size;
         Ok(actual)
     }
 
-    #[must_use]
     fn load_from_start(&mut self, target: usize) -> io::Result<usize> {
         let write_buffer = &mut self.buffer[self.offset..self.offset + target];
         assert_eq!(write_buffer.len(), target);
-        let actual = self.source.read(write_buffer)?;
+        let actual = Self::load_n_or_eof(self.source, write_buffer)?;
         self.missing += target - actual;
         self.offset += target;
         Ok(actual)
