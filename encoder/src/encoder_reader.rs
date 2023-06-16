@@ -27,7 +27,7 @@ where
         // ___________12345678
         source.read_exact(&mut buff[dict_size - 1..dict_size])?;
         let write_buffer = &mut buff[dict_size..];
-        let actual = source.read(write_buffer)?;
+        let actual = Self::load_n_or_eof(source, write_buffer)?;
         let missing = write_buffer.len() - actual;
         // fill dictionary
         // [dictionary][input]
@@ -105,5 +105,16 @@ impl<'a, Reader> Index<usize> for EncoderReader<'a, Reader> {
         } else {
             &self.buffer[(self.offset + index) % self.size]
         }
+    }
+}
+
+impl<'a, T> Debug for EncoderReader<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EncoderReader")
+            .field("size", &self.size)
+            .field("buffer", &self.buffer)
+            .field("offset", &self.offset)
+            .field("missing", &self.missing)
+            .finish()
     }
 }
