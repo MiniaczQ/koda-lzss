@@ -1,5 +1,8 @@
 import re
 import pandas as pd
+import numpy as np 
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def read_file(file_name: str) -> list[str]:
     with open(file_name, "r") as results:
@@ -71,6 +74,19 @@ def parse_sentences(sentences):
 
     return results
 
+def draw_heatmap_for_file(file_name:str, df:pd.DataFrame) -> None:
+    sub_df = df[df.filename == file_name]
+    table = sub_df.pivot(index="length", columns="distance", values="compression_rate")
+    
+    sns.heatmap(table, vmax=3.5, vmin=0, cmap='RdYlGn_r', linewidths=0.5, annot=True)
+    plt.title(file_name)
+    plt.xlabel('bit distance')
+    plt.ylabel('bit length')
+    plt.show()
+    
+def draw_multiple_heatmaps(files_list:list[str], df:pd.DataFrame) -> None:
+    for file in files_list:
+        draw_heatmap_for_file(file, df)
 
 
 if __name__== "__main__":
@@ -78,8 +94,11 @@ if __name__== "__main__":
     
     lines = read_file(file_name)
     results = parse_sentences(lines)
-    
-        
+      
     df = pd.DataFrame.from_records(results)
-    print(df.real_decoding_time.value_counts().sum())
+    df["compression_rate"] = round(df["original_size"]/df["compressed_size"],3)
+    
+    files_list = df.filename.unique()
+    draw_multiple_heatmaps(files_list, df)
+    
     
