@@ -102,13 +102,13 @@ impl LzssOptions {
         match symbol {
             LzssSymbol::S(s) => {
                 //println!("char {:?}", s as char);
-                Ok(destination.write_bit(false)? + destination.write_few(s as usize, 8)?)
+                Ok(destination.write_bit(false)? + destination.write_few(s as u32, 8)?)
             }
             LzssSymbol::PC(p, c) => {
                 //println!("pair {:?} {:?}", p, c);
                 Ok(destination.write_bit(true)?
-                    + destination.write_few(p as usize, self.dictionary_bits)?
-                    + destination.write_few(c as usize, self.max_match_bits)?)
+                    + destination.write_few(p, self.dictionary_bits)?
+                    + destination.write_few(c, self.max_match_bits)?)
             }
         }
     }
