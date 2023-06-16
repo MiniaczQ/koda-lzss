@@ -17,7 +17,10 @@ pub fn find_largest_subset(
     let mut start_ptr: usize = 0;
     while start_ptr < a_size - final_size && final_size < b_size {
         let mut size: usize = 0;
-        while size < b_size && start_ptr + size < inner_max && a[start_ptr + size] == b[size] {
+        while size < b_size - 1
+            && start_ptr + size < inner_max - 1
+            && a[start_ptr + size] == b[size]
+        {
             size += 1;
         }
 

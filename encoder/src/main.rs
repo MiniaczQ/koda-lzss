@@ -89,7 +89,8 @@ fn args() -> Result<Args, String> {
 fn main() {
     let args = args().unwrap();
     let mut file_input = BufReader::new(File::open(args.input).unwrap());
-    let mut file_output = File::create(args.output).unwrap();
+    let mut file_output = File::create(args.output.clone()).unwrap();
+    //let mut debug = BufWriter::new(File::create(args.output.with_extension("debug")).unwrap());
     let lzss = LzssOptions::new(
         args.dictionary_bits,
         args.max_match_bits,
@@ -97,6 +98,8 @@ fn main() {
         args.max_match_size,
         args.extend_into_input,
     );
-    let (read, written) = lzss.encode(&mut file_input, &mut file_output).unwrap();
+    let (read, written) = lzss
+        .encode(&mut file_input, &mut file_output, Option::<&mut File>::None)
+        .unwrap();
     println!("Compressed {} bytes into {} bytes.", read, written);
 }
