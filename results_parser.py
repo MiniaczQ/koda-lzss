@@ -10,7 +10,7 @@ def read_file(file_name: str) -> list[str]:
     return results
 
 def parse_sentences(sentences):
-    file_pattern = r'Testing file (.+?)\.\.\.'
+    file_pattern = r'Testing file ./data(.+?)\.\.\.'
     compressed_pattern = r'Compressed (\d+) bytes into (\d+) bytes.'
     real_time_pattern = r'real\t(.+)'
     user_time_pattern = r'user\t(.+)'
@@ -78,13 +78,16 @@ def draw_heatmap_for_file(file_name:str, df:pd.DataFrame) -> None:
     sub_df = df[df.filename == file_name]
     table = sub_df.pivot(index="length", columns="distance", values="compression_rate")
     
-    sns.heatmap(table, vmax=3.5, vmin=0, cmap='RdYlGn_r', linewidths=0.5, annot=True)
-    plt.title(file_name)
-    plt.xlabel('bit distance')
-    plt.ylabel('bit length')
+    ax = sns.heatmap(table, vmax=3.5, vmin=0, cmap='RdYlGn_r', linewidths=0.5, annot=True)
+    ax.invert_yaxis()
+    plt.title("Compression Rate for: " + file_name)
+    plt.xlabel('offset size [b]')
+    plt.ylabel('match size [b]')
     plt.show()
     
-def draw_multiple_heatmaps(files_list:list[str], df:pd.DataFrame) -> None:
+def cr_heatmap_generation( df:pd.DataFrame) -> None:
+    df["compression_rate"] = round(df["original_size"]/df["compressed_size"],3)
+    files_list = df.filename.unique()
     for file in files_list:
         draw_heatmap_for_file(file, df)
 
@@ -96,9 +99,12 @@ if __name__== "__main__":
     results = parse_sentences(lines)
       
     df = pd.DataFrame.from_records(results)
-    df["compression_rate"] = round(df["original_size"]/df["compressed_size"],3)
     
-    files_list = df.filename.unique()
-    draw_multiple_heatmaps(files_list, df)
+    # CR heatmap generation
+    cr_heatmap_generation(df)
+    
+    
+    
+    
     
     
